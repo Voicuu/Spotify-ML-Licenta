@@ -1,9 +1,13 @@
 from imports import *
 
-def transform_data(df):
+def transform_data(df,artists):
+    # Filter data based on user input artists
+    #artists = input("Enter artists separated by comma: ").split(',')
+    #artists = [artist.strip() for artist in artists]
+
     # Convert milliseconds to minutes for better interpretability
     df["duration_mins"] = df["duration_ms"]/60000
-    df.drop(columns="duration_ms", inplace=True)
+    df = df.drop(columns="duration_ms")
 
     # Remove special characters from the 'artists' column using regex
     df["artists"] = df["artists"].str.replace("[\\[\\]']", "", regex=True)
@@ -13,7 +17,8 @@ def transform_data(df):
     # Mapping popularity into categorical levels
     data['popularity_level'] = pd.cut(data.popularity, bins=[-1, 30, 60, 100], labels=[1, 2, 3]).astype(int)
 
-    artists = ['Drake', 'Lady Gaga', 'Taylor Swift', 'The Weeknd', 'Da Baby']
+    
+    #artists = ['Drake', 'Lady Gaga', 'Taylor Swift', 'The Weeknd', 'Da Baby']
     
     # Create a list of indices corresponding to the artists above
     to_drop = data[data.artists.isin(artists)].index
@@ -34,7 +39,9 @@ def transform_data(df):
 
     # Check if data is empty after dropping rows
     if data.empty:
-        raise ValueError("Data is empty after dropping rows.")
+        if df.empty:
+           print("No data found for the entered artists. Please check the artist names and try again.")
+           return None, None, None, None, None, None  # Returning None for all expected outputs
 
     y = data['popularity_level']
     X = data.drop(columns=['popularity_level'])

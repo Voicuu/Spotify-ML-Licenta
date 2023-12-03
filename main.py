@@ -3,47 +3,45 @@ from data_loading_and_cleaning import load_and_clean_data
 from data_visualization import visualize_data
 from data_transformation import transform_data
 from modeling import run_models
+from tabulate import tabulate
 
-def display_results(results):
-    rows = [(res[0], res[1], res[3]) for res in results]
-    tab = tabulate(rows, headers=['Algorithm', 'Accuracy', 'F1 Score'], tablefmt='fancy_grid')
-    print(tab)
+def display_results(filepath):
+    results_df = pd.read_csv(filepath)
+    print(tabulate(results_df, headers='keys', tablefmt='psql'))
 
-def display_example_cases(df, cases_with_mode, best_model, ctr):
-    # Sample and reset index
-    cases_mix = cases_with_mode.sample(frac=1.0, random_state=42).reset_index(drop=True)
-
-    # Prepare data for prediction
-    cases_X = cases_mix.drop(['popularity_level', 'explicit', 'id', 'release_date'], axis=1, errors='ignore')
-
-    if cases_X.empty:
-        raise ValueError("cases_X is empty, can't transform it.")
-
-    # Transform cases_X using the ColumnTransformer fitted on the training data
-    cases_X_transformed = ctr.transform(cases_X)
-
-    # Predict and create a DataFrame with matching indices
-    cases_pred = pd.DataFrame(best_model.predict(cases_X_transformed), columns=['predicted_popularity'])
-
-    # Concatenate predictions with original data
-    res = pd.concat([cases_mix, cases_pred], axis=1)
-
-    # Display the desired columns
+def display_example_cases(cases_with_mode_path, best_model_path, column_transformer_path):
+    with open(column_transformer_path, 'rb') as f:
+        ctr = pickle.load(f)
+    with open(best_model_path, 'rb') as f:
+        best_model = pickle.load(f)
+    cases_with_mode = pd.read_csv(cases_with_mode_path)
+    cases_X_transformed = ctr.transform(cases_with_mode.drop(['popularity_level', 'explicit', 'id', 'release_date'], axis=1, errors='ignore'))
+    cases_with_mode['predicted_popularity'] = best_model.predict(cases_X_transformed)
     desired_columns = ['artists', 'name', 'popularity', 'popularity_level', 'predicted_popularity']
-    print(tabulate(res[desired_columns].head(10), headers='keys', tablefmt='psql'))
+    print(tabulate(cases_with_mode[desired_columns].head(10), headers='keys', tablefmt='psql'))
 
 def main():
-    df = load_and_clean_data()
-    #print(df.columns)
-    #visualize_data(df)
-    X_train, X_test, y_train, y_test, cases_with_mode, ctr = transform_data(df)
+    model_folder = 'trained_models/'
+    cases_with_mode_path = os.path.join(model_folder, 'cases_with_mode.csv')
+    best_model_name_path = os.path.join(model_folder, 'best_model_name.txt')
+    column_transformer_path = os.path.join(model_folder, 'column_transformer.pkl')
 
-    results = run_models(X_train, X_test, y_train, y_test)
-    display_results(results)
-
-    # Choose the best performing model for displaying example cases
-    best_model = max(results, key=lambda x: x[1])[2] 
-    display_example_cases(df, cases_with_mode, best_model, ctr)
+    # Load and display results if available
+    results_csv_path = os.path.join(model_folder, 'results.csv')
+    if os.path.isfile(results_csv_path):
+        display_results(results_csv_path)
+    
+    # Load and display example cases if available
+    if os.path.isfile(cases_with_mode_path) and os.path.isfile(best_model_name_path):
+        with open(best_model_name_path, 'r') as f:
+            best_model_name = f.read().strip()
+        best_model_path = os.path.join(model_folder, f'{best_model_name}_model.pkl')
+        if os.path.isfile(best_model_path) and os.path.isfile(column_transformer_path):
+            display_example_cases(cases_with_mode_path, best_model_path, column_transformer_path)
+        else:
+            print("Model or transformer file not found. Please run the web app to generate the model.")
+    else:
+        print("Cases with mode file not found. Please add artists in the web app.")
 
 if __name__ == "__main__":
     main()

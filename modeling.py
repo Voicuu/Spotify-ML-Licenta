@@ -2,6 +2,7 @@ from imports import *
 
 def run_model(model, X_train, y_train, X_test, y_test, alg_name):
     try:
+        print(f"Starting training for {alg_name}.")
         start_time = time()  # Record the start time
         
         # Creating a pipeline with SMOTE and the model
@@ -37,8 +38,12 @@ def run_model(model, X_train, y_train, X_test, y_test, alg_name):
         print(Cr)
         print("-------------------------------\n")
 
-        return (alg_name, accuracy, model, f1)
-
+        # Ensure the model is a pipeline that can be used for predictions
+        if isinstance(pipeline, ImbPipeline):
+            return (alg_name, accuracy, pipeline, f1)
+        else:
+            print(f"{alg_name} is not a valid pipeline.")
+            return None
     except Exception as e:
         print(f"An error occurred while running the model {alg_name}: {e}")
         return None
@@ -54,7 +59,13 @@ def hyperparameter_tuning(model, params, X_train, y_train):
         return None
 
 def run_models(X_train, X_test, y_train, y_test):
+    print("Starting the model training process...")
     results = []
+    
+    model_folder = "trained_models/"
+    
+    if not os.path.exists(model_folder):
+        os.makedirs(model_folder)
 
     # Decision Tree
     #dt_params = {
@@ -84,22 +95,63 @@ def run_models(X_train, X_test, y_train, y_test):
     #lr_best = hyperparameter_tuning(LogisticRegression(), lr_params, X_train, y_train)
     #results.append(run_model(lr_best, X_train, y_train, X_test, y_test, "Logistic Regression""))
 #
-    #AdaBoostClassifier
-    ada_params = {'n_estimators': [50, 100, 200], 'learning_rate': [0.01, 0.1, 1]}
-    ada_best = hyperparameter_tuning(AdaBoostClassifier(), ada_params, X_train, y_train)
-    results.append(run_model(ada_best, X_train, y_train, X_test, y_test, "AdaBoostClassifier"))
+    # AdaBoostClassifier
+    ada_model_path = os.path.join(model_folder, "ada_model.pkl")
+    if os.path.isfile(ada_model_path):
+        with open(ada_model_path, 'rb') as f:
+            ada_best = pickle.load(f)
+    else:
+        ada_params = {
+            'n_estimators': [50, 100, 200],
+            'learning_rate': [0.01, 0.1, 1]
+        }
+        ada_best = hyperparameter_tuning(AdaBoostClassifier(), ada_params, X_train, y_train)
+        if ada_best:
+            with open(ada_model_path, 'wb') as f:
+                pickle.dump(ada_best, f)
+    if isinstance(ada_best, AdaBoostClassifier):
+        results.append(run_model(ada_best, X_train, y_train, X_test, y_test, "AdaBoostClassifier"))
 
-    #Random Forest with hyperparameter tuning
-    rf_params = {
-        'n_estimators': [100, 200, 300, 400],
-        'max_depth': [None, 20, 30, 40],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'max_features': ['sqrt'],
-        'class_weight': [None, 'balanced']
-    }
-    rf_best = hyperparameter_tuning(RandomForestClassifier(), rf_params, X_train, y_train)
-    if rf_best:
+    # Random Forest with hyperparameter tuning
+    rf_model_path = os.path.join(model_folder, "rf_model.pkl")
+    if os.path.isfile(rf_model_path):
+        with open(rf_model_path, 'rb') as f:
+            rf_best = pickle.load(f)
+    else:
+        rf_params = {
+            'n_estimators': [100, 200, 300, 400],
+            'max_depth': [None, 20, 30, 40],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt'],
+            'class_weight': [None, 'balanced']
+        }
+        rf_best = hyperparameter_tuning(RandomForestClassifier(), rf_params, X_train, y_train)
+        if rf_best:
+            with open(rf_model_path, 'wb') as f:
+                pickle.dump(rf_best, f)
+    if isinstance(rf_best, RandomForestClassifier):
         results.append(run_model(rf_best, X_train, y_train, X_test, y_test, "Random Forest"))
 
+    # Save the results and the models
+    results_df = pd.DataFrame(results, columns=['Algorithm', 'Accuracy', 'Model', 'F1 Score'])
+    results_csv_path = os.path.join(model_folder, "results.csv")
+    results_df.to_csv(results_csv_path, index=False)
+
+    # Determine the best model based on your criteria (e.g., accuracy)
+    best_model_entry = max(results, key=lambda x: x[1])  # x[1] should be accuracy
+    best_model_name, best_model_accuracy, best_model_pipeline, best_model_f1 = best_model_entry
+
+    # Save the best model name
+    best_model_name_path = os.path.join(model_folder, 'best_model_name.txt')
+    with open(best_model_name_path, 'w') as f:
+        f.write(best_model_name)
+
+    # Save each model as part of a pipeline
+    for alg_name, _, model_pipeline, _ in results:
+        model_path = os.path.join(model_folder, f"{alg_name}_model.pkl")
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_pipeline, f)
+    
+    print(f"Finished fitting models. Best model: {best_model_name} with accuracy: {best_model_accuracy}")
     return results
