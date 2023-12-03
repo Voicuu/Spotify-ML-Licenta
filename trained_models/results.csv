@@ -1,8 +1,0 @@
-Algorithm,Accuracy,Model,F1 Score
-AdaBoostClassifier,0.8093312937062938,"Pipeline(steps=[('smote', SMOTE(random_state=42)),
-                ('model',
-                 AdaBoostClassifier(learning_rate=0.1, n_estimators=200))])",0.8115478770497281
-Random Forest,0.8122814685314685,"Pipeline(steps=[('smote', SMOTE(random_state=42)),
-                ('model',
-                 RandomForestClassifier(min_samples_split=10,
-                                        n_estimators=200))])",0.8153617465411747
