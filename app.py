@@ -1,7 +1,4 @@
-import streamlit as st
-import pickle
-import os
-import pandas as pd
+from imports import *
 from data_loading_and_cleaning import load_and_clean_data
 from data_transformation import transform_data
 from modeling import run_models

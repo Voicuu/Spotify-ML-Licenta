@@ -50,7 +50,7 @@ def transform_data(df,artists):
     if X.empty:
         raise ValueError("Feature data (X) is empty after preprocessing.")
     
-    X_train, X_test, y_train, y_test = split(X, y, test_size = 0.25, random_state = 42)
+    X_train, X_test, y_train, y_test = split(X, y, test_size = 0.2, random_state = 42)
 
     # Check if training or test set is empty after splitting
     if X_train.empty or X_test.empty:

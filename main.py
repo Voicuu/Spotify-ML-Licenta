@@ -1,9 +1,6 @@
 from imports import *
 from data_loading_and_cleaning import load_and_clean_data
 from data_visualization import visualize_data
-from data_transformation import transform_data
-from modeling import run_models
-from tabulate import tabulate
 
 def display_results(filepath):
     results_df = pd.read_csv(filepath)
@@ -21,6 +18,8 @@ def display_example_cases(cases_with_mode_path, best_model_path, column_transfor
     print(tabulate(cases_with_mode[desired_columns].head(10), headers='keys', tablefmt='psql'))
 
 def main():
+    df = load_and_clean_data()
+    #visualize_data(df)
     model_folder = 'trained_models/'
     cases_with_mode_path = os.path.join(model_folder, 'cases_with_mode.csv')
     best_model_name_path = os.path.join(model_folder, 'best_model_name.txt')
