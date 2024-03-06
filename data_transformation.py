@@ -16,7 +16,7 @@ def transform_data(df, artists):
 
     # Mapping popularity into categorical levels
     data["popularity_level"] = pd.cut(
-        data["popularity"], bins=[-1, 30, 60, 100], labels=[1, 2, 3]
+        data["popularity"], bins=[-1, 30, 60, 100], labels=[0, 1, 2]
     ).astype(int)
 
     # Separate the test cases before dropping unnecessary rows
@@ -37,8 +37,8 @@ def transform_data(df, artists):
     )
 
     # Under-sample the majority class to balance the dataset
-    data.drop(data[data["popularity_level"] == 2].index[:60000], inplace=True)
     data.drop(data[data["popularity_level"] == 1].index[:60000], inplace=True)
+    data.drop(data[data["popularity_level"] == 0].index[:60000], inplace=True)
 
     # Split data into features and target
     y = data.popularity_level

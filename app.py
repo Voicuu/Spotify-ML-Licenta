@@ -28,7 +28,7 @@ Algoritmii noștri avansati de învățare automată analizează esența caracte
 
 ### Cum funcționează? 🤔
 1. **Selectează Artiștii**: Alege dintr-o varietate de muzicieni talentați din bara laterală.
-2. **Prezicerea Hitului**: Cu doar un clic, începe procesul de prezicere a popularității melodiilor alese.
+2. **Prezicerea Hitului**: Cu doar un clic, începe procesul de prezicere a popularității.
 3. **Rezultate**: Explorează elementele care dau unei melodii popularitatea sa pe Spotify.
 """,
     unsafe_allow_html=True,
@@ -195,7 +195,7 @@ def on_form_submit():
 
                 st.subheader("Rezultatele prezicerii:")
                 st.text(
-                    "Mai jos sunt afișate predicțiile pentru popularitatea melodiilor alese: "
+                    "Mai jos sunt afișate predicțiile pentru popularitatea melodiilor artiștilor aleși: "
                 )
 
                 updated_cases_with_mode = pd.concat(

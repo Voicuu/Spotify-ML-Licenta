@@ -1,4 +1,7 @@
 from imports import *
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from imblearn.over_sampling import ADASYN
 
 
 def run_model(model, X_train, y_train, X_test, y_test, alg_name):
@@ -6,8 +9,16 @@ def run_model(model, X_train, y_train, X_test, y_test, alg_name):
         print(f"Starting training for {alg_name}.")
         start_time = time()  # Record the start time
 
+        if alg_name in [
+            "XGBoost",
+            "LightGBM",
+        ]:
+            resampling = ADASYN(random_state=42)
+        else:
+            resampling = SMOTE(random_state=42)
+
         # Creating a pipeline with SMOTE and the model
-        pipeline = ImbPipeline([("smote", SMOTE(random_state=42)), ("model", model)])
+        pipeline = ImbPipeline([("resample", resampling), ("model", model)])
 
         # Fit model
         pipeline.fit(X_train, y_train)
@@ -53,7 +64,7 @@ def hyperparameter_tuning(model, params, X_train, y_train):
             model,
             params,
             n_iter=10,
-            cv=3,
+            cv=5,
             n_jobs=-1,
             random_state=42,
             scoring="accuracy",
@@ -83,11 +94,17 @@ def run_models(X_train, X_test, y_train, y_test):
             dt_best = pickle.load(f)
     else:
         dt_params = {
-            "max_depth": [10, 20, 30, None],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
-            "max_features": ["sqrt", "log2"],
-            "criterion": ["gini", "entropy"],
+            "max_depth": [None, 5, 7, 9, 11, 15],
+            "max_leaf_nodes": [5, 20, 40, 80, 120, 160, 200],
+            "max_features": [
+                "sqrt",
+                "log2",
+                0.3,
+                0.5,
+                0.7,
+            ],
+            "min_samples_split": [2],
+            "min_samples_leaf": [1],
         }
         dt_best = hyperparameter_tuning(
             DecisionTreeClassifier(), dt_params, X_train, y_train
@@ -131,24 +148,81 @@ def run_models(X_train, X_test, y_train, y_test):
     # results.append(run_model(lr_best, X_train, y_train, X_test, y_test, "Logistic Regression""))
     #
 
-    # AdaBoostClassifier
-    ada_model_path = os.path.join(model_folder, "ada_model.pkl")
-    if os.path.isfile(ada_model_path):
-        with open(ada_model_path, "rb") as f:
-            ada_best = pickle.load(f)
+    # LightGBM
+    lgb_model_path = os.path.join(model_folder, "lgb_model.pkl")
+    if os.path.isfile(lgb_model_path):
+        with open(lgb_model_path, "rb") as f:
+            lgb_best = pickle.load(f)
     else:
-        ada_params = {"n_estimators": [50, 100, 200], "learning_rate": [0.01, 0.1, 1]}
-        ada_best = hyperparameter_tuning(
-            AdaBoostClassifier(), ada_params, X_train, y_train
+        lgb_params = {
+            "num_leaves": [31, 40, 50, 60, 80],
+            "learning_rate": [0.005, 0.01, 0.1, 0.2],
+            "n_estimators": [100, 300, 500, 1000],
+            "max_depth": [-1],
+            "subsample": [0.8, 0.9, 1.0],
+            "colsample_bytree": [0.8, 0.9, 1.0],
+            "force_col_wise": ["true"],
+            "min_child_samples": [5, 10, 20],
+        }
+        lgb_best = hyperparameter_tuning(
+            LGBMClassifier(),
+            lgb_params,
+            X_train,
+            y_train,
         )
-        if ada_best:
-            with open(ada_model_path, "wb") as f:
-                pickle.dump(ada_best, f)
-    if isinstance(ada_best, AdaBoostClassifier):
+        if lgb_best:
+            with open(lgb_model_path, "wb") as f:
+                pickle.dump(lgb_best, f)
+    if isinstance(lgb_best, LGBMClassifier):
         results.append(
-            run_model(ada_best, X_train, y_train, X_test, y_test, "AdaBoostClassifier")
+            run_model(lgb_best, X_train, y_train, X_test, y_test, "LightGBM")
         )
 
+    # XGBoost
+    xgb_model_path = os.path.join(model_folder, "xgb_model.pkl")
+    if os.path.isfile(xgb_model_path):
+        with open(xgb_model_path, "rb") as f:
+            xgb_best = pickle.load(f)
+    else:
+        xgb_params = {
+            "n_estimators": [100, 300, 500, 1000],
+            "learning_rate": [0.005, 0.01, 0.1, 0.2],
+            "max_depth": [3, 6, 9, 12],
+            "subsample": [0.8, 0.9, 1.0],
+            "colsample_bytree": [0.8, 0.9, 1.0],
+            "gamma": [0, 0.1, 0.5, 1],
+            "lambda": [0, 0.1, 1],
+        }
+        xgb_best = hyperparameter_tuning(
+            XGBClassifier(use_label_encoder=False, eval_metric="mlogloss"),
+            xgb_params,
+            X_train,
+            y_train,
+        )
+        if xgb_best:
+            with open(xgb_model_path, "wb") as f:
+                pickle.dump(xgb_best, f)
+    if isinstance(xgb_best, XGBClassifier):
+        results.append(run_model(xgb_best, X_train, y_train, X_test, y_test, "XGBoost"))
+
+    #    # AdaBoostClassifier
+    #    ada_model_path = os.path.join(model_folder, "ada_model.pkl")
+    #    if os.path.isfile(ada_model_path):
+    #        with open(ada_model_path, "rb") as f:
+    #            ada_best = pickle.load(f)
+    #    else:
+    #        ada_params = {"n_estimators": [50, 100, 200], "learning_rate": [0.01, 0.1, 1]}
+    #        ada_best = hyperparameter_tuning(
+    #            AdaBoostClassifier(), ada_params, X_train, y_train
+    #        )
+    #        if ada_best:
+    #            with open(ada_model_path, "wb") as f:
+    #                pickle.dump(ada_best, f)
+    #    if isinstance(ada_best, AdaBoostClassifier):
+    #        results.append(
+    #            run_model(ada_best, X_train, y_train, X_test, y_test, "AdaBoostClassifier")
+    #        )
+    #
     # Random Forest with hyperparameter tuning
     rf_model_path = os.path.join(model_folder, "rf_model.pkl")
     if os.path.isfile(rf_model_path):
@@ -156,12 +230,12 @@ def run_models(X_train, X_test, y_train, y_test):
             rf_best = pickle.load(f)
     else:
         rf_params = {
-            "n_estimators": [100, 200, 300, 400],
-            "max_depth": [None, 20, 30, 40],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
-            "max_features": ["sqrt"],
-            "class_weight": [None, "balanced"],
+            "n_estimators": [10, 50, 100, 150, 200],
+            "max_depth": [None, 5, 7, 9, 11, 15],
+            "max_leaf_nodes": [5, 20, 40, 80, 120, 160, 200],
+            "max_features": ["sqrt", "log2", 0.5],
+            "min_samples_split": [2],
+            "min_samples_leaf": [1],
         }
         rf_best = hyperparameter_tuning(
             RandomForestClassifier(), rf_params, X_train, y_train
