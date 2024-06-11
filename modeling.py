@@ -1,13 +1,10 @@
 from imports import *
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from imblearn.over_sampling import ADASYN
-
+import plotly.io as pio
 
 def run_model(model, X_train, y_train, X_test, y_test, alg_name):
     try:
         print(f"Starting training for {alg_name}.")
-        start_time = time()  # Record the start time
+        start_time = time.time()  # Record the start time
 
         if alg_name in [
             "XGBoost",
@@ -17,37 +14,33 @@ def run_model(model, X_train, y_train, X_test, y_test, alg_name):
         else:
             resampling = SMOTE(random_state=42)
 
-        # Creating a pipeline with SMOTE and the model
         pipeline = ImbPipeline([("resample", resampling), ("model", model)])
 
-        # Fit model
         pipeline.fit(X_train, y_train)
 
-        fit_time = time()  # Record the time after fitting the model
+        fit_time = time.time()  # Record the time after fitting the model
 
-        # Predict and evaluate
         y_pred = pipeline.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
         f1 = f1_score(y_test, y_pred, average="weighted")
         cm = confusion_matrix(y_test, y_pred)
         Cr = classification_report(y_test, y_pred)
 
-        evaluation_time = time()  # Record the time after evaluation
+        evaluation_time = time.time()  # Record the time after evaluation
 
-        # Display the results
+        # results
         print(f"--- Model: {alg_name} ---")
         print(f"Model fitting took {fit_time - start_time:.2f} seconds.")
         print(f"Model evaluation took {evaluation_time - fit_time:.2f} seconds.")
         print(f"Total time: {evaluation_time - start_time:.2f} seconds.")
-        print(f"Accuracy on Test Set: {accuracy:.2f}")
-        print(f"F1 Score on Test Set: {f1:.2f}")
+        print(f"Accuracy on Test Set: {accuracy:.5f}")
+        print(f"F1 Score on Test Set: {f1:.5f}")
         print("Confusion Matrix:")
         print(cm)
         print("\nClassification Report:")
         print(Cr)
         print("-------------------------------\n")
 
-        # Ensure the model is a pipeline that can be used for predictions
         if isinstance(pipeline, ImbPipeline):
             return (alg_name, accuracy, pipeline, f1)
         else:
@@ -58,221 +51,157 @@ def run_model(model, X_train, y_train, X_test, y_test, alg_name):
         return None
 
 
-def hyperparameter_tuning(model, params, X_train, y_train):
+def hyperparameter_tuning(model_class, X_train, y_train, X_test, y_test, n_trials=100):
+    def objective(trial):
+        if model_class == XGBClassifier:
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'max_depth': trial.suggest_int('max_depth', 3, 10),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+            }
+        elif model_class == LGBMClassifier:
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'max_depth': trial.suggest_int('max_depth', 1, 20),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+                'num_leaves': trial.suggest_int('num_leaves', 20, 300),
+                'min_child_samples': trial.suggest_int('min_child_samples', 20, 100),
+                'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 20, 100),
+                'min_gain_to_split': trial.suggest_float('min_gain_to_split', 0, 15),
+                'verbose': -1,
+            }
+            if params['max_depth'] == 20:
+                params['max_depth'] = -1
+        elif model_class == DecisionTreeClassifier:
+            params = {
+                'criterion': trial.suggest_categorical('criterion', ['gini', 'entropy']),
+                'max_depth': trial.suggest_int('max_depth', 1, 20),
+                'min_samples_split': trial.suggest_int('min_samples_split', 2, 20),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 20),
+            }
+        elif model_class == AdaBoostClassifier:
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 2.0),
+            }
+        elif model_class == RandomForestClassifier:
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 10, 200),
+                'max_depth': trial.suggest_int('max_depth', 3, 20),
+                'min_samples_split': trial.suggest_int('min_samples_split', 2, 10),
+                'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 10),
+                'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
+            }
+#        elif model_class == SVC:
+#            params = {
+#                'C': trial.suggest_loguniform('C', 1e-3, 1e2),
+#                'kernel': trial.suggest_categorical('kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
+#                'gamma': trial.suggest_categorical('gamma', ['scale', 'auto']),
+#            }
+        else:
+            raise NotImplementedError("This class is not yet implemented for tuning")
+
+
+        model = model_class(**params)
+        resampler = ADASYN(random_state=42) if model_class in [XGBClassifier, LGBMClassifier] else SMOTE(random_state=42)
+        pipeline = ImbPipeline(steps=[('resample', resampler), ('model', model)])
+        
+        pipeline.fit(X_train, y_train)
+        preds = pipeline.predict(X_test)
+        accuracy = accuracy_score(y_test, preds)
+        return accuracy
+
+    study = optuna.create_study(direction='maximize')
+    study.optimize(lambda trial: objective(trial), n_trials=n_trials)
+
+    best_params = study.best_params
+    best_model = model_class(**best_params)
+    best_model.fit(X_train, y_train)
+
+    return best_model, study
+
+def visualize_study(study, model_name, output_folder):
     try:
-        random_search = RandomizedSearchCV(
-            model,
-            params,
-            n_iter=10,
-            cv=5,
-            n_jobs=-1,
-            random_state=42,
-            scoring="accuracy",
-            verbose=2,
-        )
-        random_search.fit(X_train, y_train)
-        return random_search.best_estimator_
+        model_output_folder = os.path.join(output_folder, model_name)
+        if not os.path.exists(model_output_folder):
+            os.makedirs(model_output_folder)
 
+        # Optimization History
+        fig1 = ov.plot_optimization_history(study)
+        pio.write_image(fig1, os.path.join(model_output_folder, f"{model_name}_optimization_history.png"))
+        
+        # Param Importance
+        fig2 = ov.plot_param_importances(study)
+        pio.write_image(fig2, os.path.join(model_output_folder, f"{model_name}_param_importance.png"))
+
+        print(f"Visualizations saved for {model_name}.")
+    except ImportError:
+        print("Optuna visualization is not available. Ensure you have matplotlib installed.")
     except Exception as e:
-        print(f"An error occurred during hyperparameter tuning: {e}")
-        return None
-
+        print(f"An error occurred while visualizing the study for {model_name}: {e}")
 
 def run_models(X_train, X_test, y_train, y_test):
     print("Starting the model training process...")
     results = []
 
     model_folder = "trained_models/"
+    output_folder = "visualizations/"
 
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
 
-    # Decision Tree
-    dt_model_path = os.path.join(model_folder, "dt_model.pkl")
-    if os.path.isfile(dt_model_path):
-        with open(dt_model_path, "rb") as f:
-            dt_best = pickle.load(f)
-    else:
-        dt_params = {
-            "max_depth": [None, 5, 7, 9, 11, 15],
-            "max_leaf_nodes": [5, 20, 40, 80, 120, 160, 200],
-            "max_features": [
-                "sqrt",
-                "log2",
-                0.3,
-                0.5,
-                0.7,
-            ],
-            "min_samples_split": [2],
-            "min_samples_leaf": [1],
-        }
-        dt_best = hyperparameter_tuning(
-            DecisionTreeClassifier(), dt_params, X_train, y_train
-        )
-        if dt_best:
-            with open(dt_model_path, "wb") as f:
-                pickle.dump(dt_best, f)
-    if isinstance(dt_best, DecisionTreeClassifier):
-        results.append(
-            run_model(dt_best, X_train, y_train, X_test, y_test, "DecisionTree")
-        )
+    models_to_tune_optuna = {
+        "XGBoost": (XGBClassifier(use_label_encoder=False, eval_metric="logloss"), 100),
+        "LightGBM": (LGBMClassifier(), 100),
+        "DecisionTree": (DecisionTreeClassifier(), 100),
+        "AdaBoost": (AdaBoostClassifier(), 50),
+        "RandomForest": (RandomForestClassifier(), 50),
+        #"SVM": (SVC(probability=True), 50), 
+    }
 
-    # # SVM
-    # this one takes too long to run omg
-    # svm_model_path = os.path.join(model_folder, "svm_model.pkl")
-    # if os.path.isfile(svm_model_path):
-    #     with open(svm_model_path, "rb") as f:
-    #         svm_best = pickle.load(f)
-    # else:
-    #     svm_params = {
-    #         "C": [0.1, 1, 10, 100],
-    #         "gamma": ["scale", 1, 0.1, 0.01],
-    #         "kernel": ["rbf", "poly"],
-    #     }
-    #     svm_best = hyperparameter_tuning(
-    #         SVC(probability=True), svm_params, X_train, y_train
-    #     )
-    #     if svm_best:
-    #         with open(svm_model_path, "wb") as f:
-    #             pickle.dump(svm_best, f)
-    # if isinstance(svm_best, SVC):
-    #     results.append(run_model(svm_best, X_train, y_train, X_test, y_test, "SVM"))
-    ## KNeighborsClassifier
-    # knn_params = {'n_neighbors': [3, 5, 7], 'weights': ['uniform', 'distance']}
-    # knn_best = hyperparameter_tuning(KNeighborsClassifier(), knn_params, X_train, y_train)
-    # results.append(run_model(knn_best, X_train, y_train, X_test, y_test, "KNeighborsClassifier"""))
-    #
-    ## LogisticRegression
-    # lr_params = {'C': [0.1, 1, 10]}
-    # lr_best = hyperparameter_tuning(LogisticRegression(), lr_params, X_train, y_train)
-    # results.append(run_model(lr_best, X_train, y_train, X_test, y_test, "Logistic Regression""))
-    #
+    studies = {}
 
-    # LightGBM
-    lgb_model_path = os.path.join(model_folder, "lgb_model.pkl")
-    if os.path.isfile(lgb_model_path):
-        with open(lgb_model_path, "rb") as f:
-            lgb_best = pickle.load(f)
-    else:
-        lgb_params = {
-            "num_leaves": [31, 40, 50, 60, 80],
-            "learning_rate": [0.005, 0.01, 0.1, 0.2],
-            "n_estimators": [100, 300, 500, 1000],
-            "max_depth": [-1],
-            "subsample": [0.8, 0.9, 1.0],
-            "colsample_bytree": [0.8, 0.9, 1.0],
-            "force_col_wise": ["true"],
-            "min_child_samples": [5, 10, 20],
-        }
-        lgb_best = hyperparameter_tuning(
-            LGBMClassifier(),
-            lgb_params,
-            X_train,
-            y_train,
-        )
-        if lgb_best:
-            with open(lgb_model_path, "wb") as f:
-                pickle.dump(lgb_best, f)
-    if isinstance(lgb_best, LGBMClassifier):
-        results.append(
-            run_model(lgb_best, X_train, y_train, X_test, y_test, "LightGBM")
-        )
+    for model_name, (model, n_trials) in models_to_tune_optuna.items():
+        print(f"\nWorking on {model_name}...")
+        model_path = os.path.join(model_folder, f"{model_name.lower()}_model.pkl")
 
-    # XGBoost
-    xgb_model_path = os.path.join(model_folder, "xgb_model.pkl")
-    if os.path.isfile(xgb_model_path):
-        with open(xgb_model_path, "rb") as f:
-            xgb_best = pickle.load(f)
-    else:
-        xgb_params = {
-            "n_estimators": [100, 300, 500, 1000],
-            "learning_rate": [0.005, 0.01, 0.1, 0.2],
-            "max_depth": [3, 6, 9, 12],
-            "subsample": [0.8, 0.9, 1.0],
-            "colsample_bytree": [0.8, 0.9, 1.0],
-            "gamma": [0, 0.1, 0.5, 1],
-            "lambda": [0, 0.1, 1],
-        }
-        xgb_best = hyperparameter_tuning(
-            XGBClassifier(use_label_encoder=False, eval_metric="mlogloss"),
-            xgb_params,
-            X_train,
-            y_train,
-        )
-        if xgb_best:
-            with open(xgb_model_path, "wb") as f:
-                pickle.dump(xgb_best, f)
-    if isinstance(xgb_best, XGBClassifier):
-        results.append(run_model(xgb_best, X_train, y_train, X_test, y_test, "XGBoost"))
+        if os.path.isfile(model_path):
+            print(f"Loading saved {model_name} model...")
+            with open(model_path, "rb") as f:
+                best_model = pickle.load(f)
+        else:
+            print(f"Tuning hyperparameters for {model_name}...")
+            best_model, study = hyperparameter_tuning(model.__class__, X_train, y_train, X_test, y_test, n_trials)
+            with open(model_path, "wb") as f:
+                pickle.dump(best_model, f)
+            studies[model_name] = study
 
-    #    # AdaBoostClassifier
-    #    ada_model_path = os.path.join(model_folder, "ada_model.pkl")
-    #    if os.path.isfile(ada_model_path):
-    #        with open(ada_model_path, "rb") as f:
-    #            ada_best = pickle.load(f)
-    #    else:
-    #        ada_params = {"n_estimators": [50, 100, 200], "learning_rate": [0.01, 0.1, 1]}
-    #        ada_best = hyperparameter_tuning(
-    #            AdaBoostClassifier(), ada_params, X_train, y_train
-    #        )
-    #        if ada_best:
-    #            with open(ada_model_path, "wb") as f:
-    #                pickle.dump(ada_best, f)
-    #    if isinstance(ada_best, AdaBoostClassifier):
-    #        results.append(
-    #            run_model(ada_best, X_train, y_train, X_test, y_test, "AdaBoostClassifier")
-    #        )
-    #
-    # Random Forest with hyperparameter tuning
-    rf_model_path = os.path.join(model_folder, "rf_model.pkl")
-    if os.path.isfile(rf_model_path):
-        with open(rf_model_path, "rb") as f:
-            rf_best = pickle.load(f)
-    else:
-        rf_params = {
-            "n_estimators": [10, 50, 100, 150, 200],
-            "max_depth": [None, 5, 7, 9, 11, 15],
-            "max_leaf_nodes": [5, 20, 40, 80, 120, 160, 200],
-            "max_features": ["sqrt", "log2", 0.5],
-            "min_samples_split": [2],
-            "min_samples_leaf": [1],
-        }
-        rf_best = hyperparameter_tuning(
-            RandomForestClassifier(), rf_params, X_train, y_train
-        )
-        if rf_best:
-            with open(rf_model_path, "wb") as f:
-                pickle.dump(rf_best, f)
-    if isinstance(rf_best, RandomForestClassifier):
-        results.append(
-            run_model(rf_best, X_train, y_train, X_test, y_test, "Random Forest")
-        )
+        result = run_model(best_model, X_train, y_train, X_test, y_test, model_name)
+        if result is not None:
+            results.append(result)
 
-    # Save the results and the models
-    results_df = pd.DataFrame(
-        results, columns=["Algorithm", "Accuracy", "Model", "F1 Score"]
-    )
+    results_df = pd.DataFrame(results, columns=["Algorithm", "Accuracy", "Model", "F1 Score"])
     results_csv_path = os.path.join(model_folder, "results.csv")
     results_df.to_csv(results_csv_path, index=False)
 
-    # Determine the best model based on your criteria (e.g., accuracy)
     best_model_entry = max(results, key=lambda x: x[1])
-    best_model_name, best_model_accuracy, best_model_pipeline, best_model_f1 = (
-        best_model_entry
-    )
+    best_model_name, best_model_accuracy, best_model_pipeline, best_model_f1 = best_model_entry
 
-    # Save the best model name
     best_model_name_path = os.path.join(model_folder, "best_model_name.txt")
     with open(best_model_name_path, "w") as f:
         f.write(best_model_name)
 
-    # Save each model as part of a pipeline
     for alg_name, _, model_pipeline, _ in results:
         model_path = os.path.join(model_folder, f"{alg_name}_model.pkl")
         with open(model_path, "wb") as f:
             pickle.dump(model_pipeline, f)
 
-    print(
-        f"Finished fitting models. Best model: {best_model_name} with accuracy: {best_model_accuracy}"
-    )
-    return results
+    for model_name, study in studies.items():
+        print(f"Visualizations for {model_name}:")
+        visualize_study(study, model_name,  output_folder)
+
+    print("Finished fitting and tuning models.")
+    return result

@@ -1,46 +1,43 @@
-import pandas as pd
+# Standard libraries
+import os
+import pickle
+import time
+
+# Data manipulation and mathematical operations
 import numpy as np
+import pandas as pd
+
+# Machine Learning Algorithms
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+
+# Preprocessing and model selection utilities
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
+
+# Handling imbalanced datasets
+from imblearn.over_sampling import ADASYN, SMOTE
+from imblearn.pipeline import Pipeline as ImbPipeline
+
+# Visualization and utility tools
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-from sklearn.model_selection import train_test_split as split
-from scipy.optimize import curve_fit
-from sklearn.preprocessing import (
-    FunctionTransformer,
-    OneHotEncoder,
-    MinMaxScaler,
-    StandardScaler,
-)
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import (
-    RandomForestClassifier,
-    AdaBoostClassifier,
-)
-from sklearn.metrics import (
-    mean_squared_error as mse,
-    accuracy_score,
-    confusion_matrix,
-    classification_report,
-)
-from sklearn.model_selection import (
-    train_test_split,
-    cross_val_score,
-    RandomizedSearchCV,
-)
 from tabulate import tabulate
-from sklearn.pipeline import make_pipeline as make_imb_pipeline
-from time import time
-from sklearn.metrics import f1_score
-from imblearn.pipeline import Pipeline as ImbPipeline
-import pandas as pd
-import pickle
-import os
+
+# Web app framework
 import streamlit as st
+
+# Advanced utilities
 import ast
 from itertools import chain
-from imblearn.over_sampling import SMOTE
+
+# Hyperparameter optimization
+import optuna
+import optuna.visualization as ov
