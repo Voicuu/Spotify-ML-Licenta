@@ -7,7 +7,7 @@ st.set_page_config(
     layout="wide", page_title="Licenta Voicu Andrei-Ciprian", page_icon="🎵"
 )
 
-st.title("Spotify Popularity Prediction")
+st.title("Predicția Popularității pe Spotify")
 
 # Sidebar
 st.sidebar.image("images/logo.png", width=280)
